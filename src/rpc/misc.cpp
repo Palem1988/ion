@@ -2,11 +2,10 @@
 // Copyright (c) 2009-2014 The Bitcoin developers
 // Copyright (c) 2014-2015 The Dash developers
 // Copyright (c) 2015-2018 The PIVX developers
-// Copyright (c) 2018-2019 The Ion developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "dstencode.h"
+#include "base58.h"
 #include "clientversion.h"
 #include "init.h"
 #include "main.h"
@@ -16,10 +15,11 @@
 #include "rpc/server.h"
 #include "spork.h"
 #include "timedata.h"
+#include "tokens/tokengroupmanager.h"
 #include "util.h"
 #ifdef ENABLE_WALLET
-#include "wallet.h"
-#include "walletdb.h"
+#include "wallet/wallet.h"
+#include "wallet/walletdb.h"
 #endif
 
 #include <stdint.h>
@@ -28,9 +28,6 @@
 
 #include <univalue.h>
 
-using namespace boost;
-using namespace boost::assign;
-using namespace std;
 
 /**
  * @note Do not add or change anything in the information returned by this
@@ -48,7 +45,7 @@ using namespace std;
 UniValue getinfo(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)
-        throw runtime_error(
+        throw std::runtime_error(
             "getinfo\n"
             "\nReturns an object containing various state info.\n"
 
@@ -96,12 +93,34 @@ UniValue getinfo(const UniValue& params, bool fHelp)
     LOCK(cs_main);
 #endif
 
+    std::string services;
+    for (int i = 0; i < 8; i++) {
+        uint64_t check = 1 << i;
+        if (nLocalServices & check) {
+            switch (check) {
+                case NODE_NETWORK:
+                    services+= "NETWORK/";
+                    break;
+                case NODE_BLOOM:
+                    services+= "BLOOM/";
+                    break;
+                case NODE_BLOOM_WITHOUT_MN:
+                case NODE_BLOOM_LIGHT_ZC:
+                    services+= "BLOOM_ZC/";
+                    break;
+                default:
+                    services+= "UNKNOWN/";
+            }
+        }
+    }
+
     proxyType proxy;
     GetProxy(NET_IPV4, proxy);
 
     UniValue obj(UniValue::VOBJ);
     obj.push_back(Pair("version", CLIENT_VERSION));
     obj.push_back(Pair("protocolversion", PROTOCOL_VERSION));
+    obj.push_back(Pair("services", services));
 #ifdef ENABLE_WALLET
     if (pwalletMain) {
         obj.push_back(Pair("walletversion", pwalletMain->GetVersion()));
@@ -112,7 +131,7 @@ UniValue getinfo(const UniValue& params, bool fHelp)
     obj.push_back(Pair("blocks", (int)chainActive.Height()));
     obj.push_back(Pair("timeoffset", GetTimeOffset()));
     obj.push_back(Pair("connections", (int)vNodes.size()));
-    obj.push_back(Pair("proxy", (proxy.IsValid() ? proxy.proxy.ToStringIPPort() : string())));
+    obj.push_back(Pair("proxy", (proxy.IsValid() ? proxy.proxy.ToStringIPPort() : std::string())));
     obj.push_back(Pair("difficulty", (double)GetDifficulty()));
     obj.push_back(Pair("testnet", Params().TestnetToBeDeprecatedFieldRPC()));
 
@@ -123,9 +142,14 @@ UniValue getinfo(const UniValue& params, bool fHelp)
     }
 
     obj.push_back(Pair("moneysupply",ValueFromAmount(chainActive.Tip()->nMoneySupply)));
+
+    if (tokenGroupManager->DarkMatterTokensCreated()) {
+        obj.push_back(Pair("XDM_supply", tokenGroupManager->TokenValueFromAmount(chainActive.Tip()->nXDMSupply, tokenGroupManager->GetDarkMatterID())));
+        obj.push_back(Pair("XDM_transactions", (uint64_t)chainActive.Tip()->nXDMTransactions));
+    }
     UniValue xionObj(UniValue::VOBJ);
     for (auto denom : libzerocoin::zerocoinDenomList) {
-        xionObj.push_back(Pair(to_string(denom), ValueFromAmount(chainActive.Tip()->mapZerocoinSupply.at(denom) * (denom*COIN))));
+        xionObj.push_back(Pair(std::to_string(denom), ValueFromAmount(chainActive.Tip()->mapZerocoinSupply.at(denom) * (denom*COIN))));
     }
     xionObj.push_back(Pair("total", ValueFromAmount(chainActive.Tip()->GetZerocoinSupply())));
     obj.push_back(Pair("xIONsupply", xionObj));
@@ -157,7 +181,7 @@ UniValue mnsync(const UniValue& params, bool fHelp)
         strMode = params[0].get_str();
 
     if (fHelp || params.size() != 1 || (strMode != "status" && strMode != "reset")) {
-        throw runtime_error(
+        throw std::runtime_error(
             "mnsync \"status|reset\"\n"
             "\nReturns the sync status or resets sync.\n"
 
@@ -256,8 +280,8 @@ public:
         obj.push_back(Pair("script", GetTxnOutputType(whichType)));
         obj.push_back(Pair("hex", HexStr(subscript.begin(), subscript.end())));
         UniValue a(UniValue::VARR);
-        BOOST_FOREACH (const CTxDestination& addr, addresses)
-            a.push_back(EncodeDestination(addr));
+        for (const CTxDestination& addr : addresses)
+            a.push_back(CBitcoinAddress(addr).ToString());
         obj.push_back(Pair("addresses", a));
         if (whichType == TX_MULTISIG)
             obj.push_back(Pair("sigsrequired", nRequired));
@@ -302,7 +326,7 @@ UniValue spork(const UniValue& params, bool fHelp)
         }
     }
 
-    throw runtime_error(
+    throw std::runtime_error(
         "spork \"name\" ( value )\n"
         "\nReturn spork values or their active state.\n"
 
@@ -324,7 +348,7 @@ UniValue spork(const UniValue& params, bool fHelp)
         "}\n"
 
         "\nResult (name):\n"
-        " \"success|failure\"       (string) Wither or not the update succeeded.\n"
+        " \"success|failure\"       (string) Whether or not the update succeeded.\n"
 
         "\nExamples:\n" +
         HelpExampleCli("spork", "show") + HelpExampleRpc("spork", "show"));
@@ -333,7 +357,7 @@ UniValue spork(const UniValue& params, bool fHelp)
 UniValue validateaddress(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() != 1)
-        throw runtime_error(
+        throw std::runtime_error(
             "validateaddress \"ionaddress\"\n"
             "\nReturn information about the given ion address.\n"
 
@@ -363,13 +387,14 @@ UniValue validateaddress(const UniValue& params, bool fHelp)
     LOCK(cs_main);
 #endif
 
-    CTxDestination dest = DecodeDestination(params[0].get_str());
-    bool isValid = IsValidDestination(dest);
+    CBitcoinAddress address(params[0].get_str());
+    bool isValid = address.IsValid();
 
     UniValue ret(UniValue::VOBJ);
     ret.push_back(Pair("isvalid", isValid));
     if (isValid) {
-        string currentAddress = EncodeDestination(dest);
+        CTxDestination dest = address.Get();
+        std::string currentAddress = address.ToString();
         ret.push_back(Pair("address", currentAddress));
         CScript scriptPubKey = GetScriptForDestination(dest);
         ret.push_back(Pair("scriptPubKey", HexStr(scriptPubKey.begin(), scriptPubKey.end())));
@@ -397,33 +422,32 @@ CScript _createmultisig_redeemScript(const UniValue& params)
 
     // Gather public keys
     if (nRequired < 1)
-        throw runtime_error("a multisignature address must require at least one key to redeem");
+        throw std::runtime_error("a multisignature address must require at least one key to redeem");
     if ((int)keys.size() < nRequired)
-        throw runtime_error(
+        throw std::runtime_error(
             strprintf("not enough keys supplied "
                       "(got %u keys, but need at least %d to redeem)",
                 keys.size(), nRequired));
     if (keys.size() > 16)
-        throw runtime_error("Number of addresses involved in the multisignature address creation > 16\nReduce the number");
+        throw std::runtime_error("Number of addresses involved in the multisignature address creation > 16\nReduce the number");
     std::vector<CPubKey> pubkeys;
     pubkeys.resize(keys.size());
     for (unsigned int i = 0; i < keys.size(); i++) {
         const std::string& ks = keys[i].get_str();
 #ifdef ENABLE_WALLET
         // Case 1: ION address and we have full public key:
-        CTxDestination dest = DecodeDestination(ks);
-        if (pwalletMain && IsValidDestination(dest)) {
-            const CKeyID *keyID = boost::get<CKeyID>(&dest);
-            if (!keyID) {
-                throw std::runtime_error(strprintf("%s does not refer to a key", ks));
-            }
+        CBitcoinAddress address(ks);
+        if (pwalletMain && address.IsValid()) {
+            CKeyID keyID;
+            if (!address.GetKeyID(keyID))
+                throw std::runtime_error(
+                    strprintf("%s does not refer to a key", ks));
             CPubKey vchPubKey;
-            if (!pwalletMain->GetPubKey(*keyID, vchPubKey)) {
-                throw std::runtime_error(strprintf("no full public key for address %s", ks));
-            }
-            if (!vchPubKey.IsFullyValid()) {
-                throw runtime_error(" Invalid public key: " + ks);
-            }
+            if (!pwalletMain->GetPubKey(keyID, vchPubKey))
+                throw std::runtime_error(
+                    strprintf("no full public key for address %s", ks));
+            if (!vchPubKey.IsFullyValid())
+                throw std::runtime_error(" Invalid public key: " + ks);
             pubkeys[i] = vchPubKey;
         }
 
@@ -433,16 +457,16 @@ CScript _createmultisig_redeemScript(const UniValue& params)
             if (IsHex(ks)) {
             CPubKey vchPubKey(ParseHex(ks));
             if (!vchPubKey.IsFullyValid())
-                throw runtime_error(" Invalid public key: " + ks);
+                throw std::runtime_error(" Invalid public key: " + ks);
             pubkeys[i] = vchPubKey;
         } else {
-            throw runtime_error(" Invalid public key: " + ks);
+            throw std::runtime_error(" Invalid public key: " + ks);
         }
     }
     CScript result = GetScriptForMultisig(nRequired, pubkeys);
 
     if (result.size() > MAX_SCRIPT_ELEMENT_SIZE)
-        throw runtime_error(
+        throw std::runtime_error(
             strprintf("redeemScript exceeds size limit: %d > %d", result.size(), MAX_SCRIPT_ELEMENT_SIZE));
 
     return result;
@@ -451,7 +475,7 @@ CScript _createmultisig_redeemScript(const UniValue& params)
 UniValue createmultisig(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() < 2 || params.size() > 2)
-        throw runtime_error(
+        throw std::runtime_error(
             "createmultisig nrequired [\"key\",...]\n"
             "\nCreates a multi-signature address with n signature of m keys required.\n"
             "It returns a json object with the address and redeemScript.\n"
@@ -479,9 +503,10 @@ UniValue createmultisig(const UniValue& params, bool fHelp)
     // Construct using pay-to-script-hash:
     CScript inner = _createmultisig_redeemScript(params);
     CScriptID innerID(inner);
+    CBitcoinAddress address(innerID);
 
     UniValue result(UniValue::VOBJ);
-    result.push_back(Pair("address", EncodeDestination(innerID)));
+    result.push_back(Pair("address", address.ToString()));
     result.push_back(Pair("redeemScript", HexStr(inner.begin(), inner.end())));
 
     return result;
@@ -490,7 +515,7 @@ UniValue createmultisig(const UniValue& params, bool fHelp)
 UniValue verifymessage(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() != 3)
-        throw runtime_error(
+        throw std::runtime_error(
             "verifymessage \"ionaddress\" \"signature\" \"message\"\n"
             "\nVerify a signed message\n"
 
@@ -514,22 +539,20 @@ UniValue verifymessage(const UniValue& params, bool fHelp)
 
     LOCK(cs_main);
 
-    string strAddress = params[0].get_str();
-    string strSign = params[1].get_str();
-    string strMessage = params[2].get_str();
+    std::string strAddress = params[0].get_str();
+    std::string strSign = params[1].get_str();
+    std::string strMessage = params[2].get_str();
 
-    CTxDestination destination = DecodeDestination(strAddress);
-    if (!IsValidDestination(destination)) {
+    CBitcoinAddress addr(strAddress);
+    if (!addr.IsValid())
         throw JSONRPCError(RPC_TYPE_ERROR, "Invalid address");
-    }
 
-    const CKeyID *keyID = boost::get<CKeyID>(&destination);
-    if (!keyID) {
+    CKeyID keyID;
+    if (!addr.GetKeyID(keyID))
         throw JSONRPCError(RPC_TYPE_ERROR, "Address does not refer to key");
-    }
 
     bool fInvalid = false;
-    vector<unsigned char> vchSig = DecodeBase64(strSign.c_str(), &fInvalid);
+    std::vector<unsigned char> vchSig = DecodeBase64(strSign.c_str(), &fInvalid);
 
     if (fInvalid)
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Malformed base64 encoding");
@@ -542,13 +565,13 @@ UniValue verifymessage(const UniValue& params, bool fHelp)
     if (!pubkey.RecoverCompact(ss.GetHash(), vchSig))
         return false;
 
-    return (pubkey.GetID() == *keyID);
+    return (pubkey.GetID() == keyID);
 }
 
 UniValue setmocktime(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() != 1)
-        throw runtime_error(
+        throw std::runtime_error(
             "setmocktime timestamp\n"
             "\nSet the local time to given timestamp (-regtest only)\n"
 
@@ -557,7 +580,7 @@ UniValue setmocktime(const UniValue& params, bool fHelp)
             "   Pass 0 to go back to using the system time.");
 
     if (!Params().MineBlocksOnDemand())
-        throw runtime_error("setmocktime for regression testing (-regtest mode) only");
+        throw std::runtime_error("setmocktime for regression testing (-regtest mode) only");
 
     LOCK(cs_main);
 
@@ -571,7 +594,7 @@ UniValue setmocktime(const UniValue& params, bool fHelp)
 UniValue getstakingstatus(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)
-        throw runtime_error(
+        throw std::runtime_error(
             "getstakingstatus\n"
             "\nReturns an object containing various staking information.\n"
 

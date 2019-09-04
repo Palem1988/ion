@@ -13,7 +13,6 @@
 
 #include <boost/assign/list_of.hpp>
 
-using namespace boost::assign;
 
 /**
  * Main network
@@ -30,7 +29,7 @@ public:
 static CBaseMainParams mainParams;
 
 /**
- * Testnet (v3)
+ * Testnet (v4)
  */
 class CBaseTestNetParams : public CBaseMainParams
 {
@@ -53,7 +52,7 @@ public:
     CBaseRegTestParams()
     {
         networkID = CBaseChainParams::REGTEST;
-        nRPCPort = 28171;
+        nRPCPort = 27171;
         strDataDir = "regtest";
     }
 };

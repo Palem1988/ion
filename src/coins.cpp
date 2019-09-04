@@ -64,8 +64,7 @@ bool CCoinsView::GetCoins(const uint256& txid, CCoins& coins) const { return fal
 bool CCoinsView::HaveCoins(const uint256& txid) const { return false; }
 uint256 CCoinsView::GetBestBlock() const { return uint256(0); }
 bool CCoinsView::BatchWrite(CCoinsMap& mapCoins, const uint256& hashBlock) { return false; }
-bool CCoinsView::GetStats(CCoinsStats& stats) const { return false; }
-
+CCoinsViewCursor *CCoinsView::Cursor() const { return 0; }
 
 CCoinsViewBacked::CCoinsViewBacked(CCoinsView* viewIn) : base(viewIn) {}
 bool CCoinsViewBacked::GetCoins(const uint256& txid, CCoins& coins) const { return base->GetCoins(txid, coins); }
@@ -73,7 +72,7 @@ bool CCoinsViewBacked::HaveCoins(const uint256& txid) const { return base->HaveC
 uint256 CCoinsViewBacked::GetBestBlock() const { return base->GetBestBlock(); }
 void CCoinsViewBacked::SetBackend(CCoinsView& viewIn) { base = &viewIn; }
 bool CCoinsViewBacked::BatchWrite(CCoinsMap& mapCoins, const uint256& hashBlock) { return base->BatchWrite(mapCoins, hashBlock); }
-bool CCoinsViewBacked::GetStats(CCoinsStats& stats) const { return base->GetStats(stats); }
+CCoinsViewCursor *CCoinsViewBacked::Cursor() const { return base->Cursor(); }
 
 CCoinsKeyHasher::CCoinsKeyHasher() : salt(GetRandHash()) {}
 
@@ -231,7 +230,7 @@ CAmount CCoinsViewCache::GetValueIn(const CTransaction& tx) const
         return 0;
 
     //todo are there any security precautions to take here?
-    if (tx.IsZerocoinSpend())
+    if (tx.HasZerocoinSpendInputs())
         return tx.GetZerocoinSpent();
 
     CAmount nResult = 0;
@@ -243,7 +242,7 @@ CAmount CCoinsViewCache::GetValueIn(const CTransaction& tx) const
 
 bool CCoinsViewCache::HaveInputs(const CTransaction& tx) const
 {
-    if (!tx.IsCoinBase() && !tx.IsZerocoinSpend()) {
+    if (!tx.IsCoinBase() && !tx.HasZerocoinSpendInputs()) {
         for (unsigned int i = 0; i < tx.vin.size(); i++) {
             const COutPoint& prevout = tx.vin[i].prevout;
             const CCoins* coins = AccessCoins(prevout.hash);

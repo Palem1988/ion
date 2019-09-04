@@ -23,7 +23,7 @@
 #define COPYRIGHT_HOLDERS "The %s developers"
 
 /* Copyright holder(s) */
-#define COPYRIGHT_HOLDERS_FINAL "The Ion Core developers"
+#define COPYRIGHT_HOLDERS_FINAL "The ION Core Developers"
 
 /* Replacement for %s in copyright holders string */
 #define COPYRIGHT_HOLDERS_SUBSTITUTION "Ion Core"
@@ -340,7 +340,7 @@
 #define LT_OBJDIR ".libs/"
 
 /* Define to the address where bug reports for this package should be sent. */
-#define PACKAGE_BUGREPORT "https://github.com/ioncoincore/ion/issues"
+#define PACKAGE_BUGREPORT "https://github.com/cevap/ion/issues"
 
 /* Define to the full name of this package. */
 #define PACKAGE_NAME "Ion Core"

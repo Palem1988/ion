@@ -24,18 +24,30 @@ Common `host-platform-triplets` for cross compilation are:
 - `x86_64-w64-mingw32` for Win64
 - `x86_64-apple-darwin14` for macOS
 - `arm-linux-gnueabihf` for Linux ARM 32 bit
+- `arm-linux-gnueabi` for Linux ARM 32 bit
 - `aarch64-linux-gnu` for Linux ARM 64 bit
 - `riscv32-linux-gnu` for Linux RISC-V 32 bit
 - `riscv64-linux-gnu` for Linux RISC-V 64 bit
-- `ppc64le-linux-gnu` for Linux PPC64EL 64 bit
-- `s390x-linux-gnu` for Linux S390X 64 bit
+- `s390x-linux-gnu` for Linux s390x
+- `powerpc-linux-gnu` for Linux PPC 32 bit
+- `powerpc-linux-gnuspe` for Linux PPC 32 bit
+- `powerpc64el-linux-gnu` for Linux PPC64EL 64 bit
+- `mipsel-linux-gnu`for Linux MIPSEL 32 bit
+- `mips-linux-gnu`for Linux MIPS 32 bit
+- `mips-linux-gnu`for Linux MIPS 32 bit
+- `sh4-linux-gnuabi64`for Linux MIPS 64 bit
+- `ia64-linux-gnu`for Linux MIPS 64 bit
+- `m68k-linux-gnu`for Linux MIPS 64 bit
+- `hppa-linux-gnu`for Linux MIPS 64 bit
+- `alpha-linux-gnu`for Linux MIPS 64 bit
+
 No other options are needed, the paths are automatically configured.
 
 ### Install the required dependencies: Ubuntu & Debian
 
 #### For macOS cross compilation
 
-    sudo apt-get install curl librsvg2-bin libtiff-tools bsdmainutils cmake imagemagick libcap-dev libz-dev libbz2-dev python-setuptools
+    sudo apt-get install curl librsvg2-bin libtiff-tools bsdmainutils cmake imagemagick libcap-dev libz-dev libbz2-dev python3-setuptools
 
 #### For Win32/Win64 cross compilation
 
@@ -45,7 +57,7 @@ No other options are needed, the paths are automatically configured.
 
 Common linux dependencies:
 
-    sudo apt-get install make automake cmake curl g++-multilib libtool binutils-gold bsdmainutils pkg-config python3
+    sudo apt-get install make automake cmake curl g++-multilib libtool binutils-gold bsdmainutils pkg-config python3 patch
 
 For linux ARM cross compilation:
 
@@ -71,6 +83,7 @@ The following can be set when running make: make FOO=bar
     FALLBACK_DOWNLOAD_PATH_ION: If a source file can't be fetched, try first from our alternative github sources
     FALLBACK_DOWNLOAD_PATH: If a source file can't be fetched, try here before giving up
     NO_QT: Don't download/build/cache qt and its dependencies
+    NO_ZMQ: Don't download/build/cache packages needed for enabling zeromq
     NO_WALLET: Don't download/build/cache libs needed to enable the wallet
     NO_UPNP: Don't download/build/cache packages needed for enabling upnp
     DEBUG: disable some optimizations and enable more runtime checking

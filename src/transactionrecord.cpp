@@ -1,7 +1,6 @@
 // Copyright (c) 2011-2014 The Bitcoin developers
 // Copyright (c) 2014-2015 The Dash developers
 // Copyright (c) 2015-2018 The PIVX developers
-// Copyright (c) 2018-2019 The Ion developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,9 +10,11 @@
 #include "obfuscation.h"
 #include "swifttx.h"
 #include "timedata.h"
-#include "wallet.h"
+#include "wallet/wallet.h"
 #include "xionchain.h"
+#include "main.h"
 
+#include <iostream>
 #include <stdint.h>
 
 /* Return positive answer if transaction should be shown in list.
@@ -43,19 +44,18 @@ std::vector<TransactionRecord> TransactionRecord::decomposeTransaction(const CWa
     std::map<std::string, std::string> mapValue = wtx.mapValue;
     bool fZSpendFromMe = false;
 
-    if (wtx.IsZerocoinSpend()) {
-        // a zerocoin spend that was created by this wallet
-        libzerocoin::CoinSpend zcspend = TxInToZerocoinSpend(wtx.vin[0]);
+    if (wtx.HasZerocoinSpendInputs()) {
+        libzerocoin::CoinSpend zcspend = wtx.HasZerocoinPublicSpendInputs() ? XIONModule::parseCoinSpend(wtx.vin[0]) : TxInToZerocoinSpend(wtx.vin[0]);
         fZSpendFromMe = wallet->IsMyZerocoinSpend(zcspend.getCoinSerialNumber());
     }
 
     if (wtx.IsCoinStake()) {
         TransactionRecord sub(hash, nTime);
         CTxDestination address;
-        if (!wtx.IsZerocoinSpend() && !ExtractDestination(wtx.vout[1].scriptPubKey, address))
+        if (!wtx.HasZerocoinSpendInputs() && !ExtractDestination(wtx.vout[1].scriptPubKey, address))
             return parts;
 
-        if (wtx.IsZerocoinSpend() && (fZSpendFromMe || wallet->xionTracker->HasMintTx(hash))) {
+        if (wtx.HasZerocoinSpendInputs() && (fZSpendFromMe || wallet->xionTracker->HasMintTx(hash))) {
             //xION stake reward
             sub.involvesWatchAddress = false;
             sub.type = TransactionRecord::StakeXION;
@@ -70,7 +70,7 @@ std::vector<TransactionRecord> TransactionRecord::decomposeTransaction(const CWa
             // ION stake reward
             sub.involvesWatchAddress = mine & ISMINE_WATCH_ONLY;
             sub.type = TransactionRecord::StakeMint;
-            sub.address = EncodeDestination(address);
+            sub.address = CBitcoinAddress(address).ToString();
             sub.credit = nNet;
         } else {
             //Masternode reward
@@ -80,13 +80,13 @@ std::vector<TransactionRecord> TransactionRecord::decomposeTransaction(const CWa
                 isminetype mine = wallet->IsMine(wtx.vout[nIndexMN]);
                 sub.involvesWatchAddress = mine & ISMINE_WATCH_ONLY;
                 sub.type = TransactionRecord::MNReward;
-                sub.address = EncodeDestination(destMN);
+                sub.address = CBitcoinAddress(destMN).ToString();
                 sub.credit = wtx.vout[nIndexMN].nValue;
             }
         }
 
         parts.push_back(sub);
-    } else if (wtx.IsZerocoinSpend()) {
+    } else if (wtx.HasZerocoinSpendInputs()) {
         //zerocoin spend outputs
         bool fFeeAssigned = false;
         for (const CTxOut& txout : wtx.vout) {
@@ -110,10 +110,10 @@ std::vector<TransactionRecord> TransactionRecord::decomposeTransaction(const CWa
                 continue;
             }
 
-            string strAddress = "";
+            std::string strAddress = "";
             CTxDestination address;
             if (ExtractDestination(txout.scriptPubKey, address))
-                strAddress = EncodeDestination(address);
+                strAddress = CBitcoinAddress(address).ToString();
 
             // a zerocoinspend that was sent to an address held by this wallet
             isminetype mine = wallet->IsMine(txout);
@@ -153,7 +153,7 @@ std::vector<TransactionRecord> TransactionRecord::decomposeTransaction(const CWa
         //
         // Credit
         //
-        BOOST_FOREACH (const CTxOut& txout, wtx.vout) {
+        for (const CTxOut& txout : wtx.vout) {
             isminetype mine = wallet->IsMine(txout);
             if (mine) {
                 TransactionRecord sub(hash, nTime);
@@ -164,7 +164,7 @@ std::vector<TransactionRecord> TransactionRecord::decomposeTransaction(const CWa
                 if (ExtractDestination(txout.scriptPubKey, address) && IsMine(*wallet, address)) {
                     // Received by ION Address
                     sub.type = TransactionRecord::RecvWithAddress;
-                    sub.address = EncodeDestination(address);
+                    sub.address = CBitcoinAddress(address).ToString();
                 } else {
                     // Received by IP connection (deprecated features), or a multisignature or other non-simple transaction
                     sub.type = TransactionRecord::RecvFromOther;
@@ -183,7 +183,7 @@ std::vector<TransactionRecord> TransactionRecord::decomposeTransaction(const CWa
         int nFromMe = 0;
         bool involvesWatchAddress = false;
         isminetype fAllFromMe = ISMINE_SPENDABLE;
-        BOOST_FOREACH (const CTxIn& txin, wtx.vin) {
+        for (const CTxIn& txin : wtx.vin) {
             if (wallet->IsMine(txin)) {
                 fAllFromMeDenom = fAllFromMeDenom && wallet->IsDenominated(txin);
                 nFromMe++;
@@ -196,7 +196,7 @@ std::vector<TransactionRecord> TransactionRecord::decomposeTransaction(const CWa
         isminetype fAllToMe = ISMINE_SPENDABLE;
         bool fAllToMeDenom = true;
         int nToMe = 0;
-        BOOST_FOREACH (const CTxOut& txout, wtx.vout) {
+        for (const CTxOut& txout : wtx.vout) {
             if (wallet->IsMine(txout)) {
                 fAllToMeDenom = fAllToMeDenom && wallet->IsDenominatedAmount(txout.nValue);
                 nToMe++;
@@ -224,7 +224,7 @@ std::vector<TransactionRecord> TransactionRecord::decomposeTransaction(const CWa
                 CTxDestination address;
                 if (ExtractDestination(wtx.vout[0].scriptPubKey, address)) {
                     // Sent to ION Address
-                    sub.address = EncodeDestination(address);
+                    sub.address = CBitcoinAddress(address).ToString();
                 } else {
                     // Sent to IP, or other non-address transaction like OP_EVAL
                     sub.address = mapValue["to"];
@@ -246,7 +246,7 @@ std::vector<TransactionRecord> TransactionRecord::decomposeTransaction(const CWa
             sub.credit = nCredit - nChange;
             parts.push_back(sub);
             parts.back().involvesWatchAddress = involvesWatchAddress; // maybe pass to TransactionRecord as constructor argument
-        } else if (fAllFromMe || wtx.IsZerocoinMint()) {
+        } else if (fAllFromMe || wtx.HasZerocoinMintOutputs()) {
             //
             // Debit
             //
@@ -268,11 +268,11 @@ std::vector<TransactionRecord> TransactionRecord::decomposeTransaction(const CWa
                 if (ExtractDestination(txout.scriptPubKey, address)) {
                     //This is most likely only going to happen when resyncing deterministic wallet without the knowledge of the
                     //private keys that the change was sent to. Do not display a "sent to" here.
-                    if (wtx.IsZerocoinMint())
+                    if (wtx.HasZerocoinMintOutputs())
                         continue;
                     // Sent to ION Address
                     sub.type = TransactionRecord::SendToAddress;
-                    sub.address = EncodeDestination(address);
+                    sub.address = CBitcoinAddress(address).ToString();
                 } else if (txout.IsZerocoinMint()){
                     sub.type = TransactionRecord::ZerocoinMint;
                     sub.address = mapValue["zerocoinmint"];
@@ -400,7 +400,6 @@ bool TransactionRecord::statusUpdateNeeded()
 
 std::string TransactionRecord::getTxID() const
 {
-    //return QString::fromStdString(hash.ToString());
     return hash.ToString();
 }
 
@@ -417,27 +416,27 @@ std::string TransactionRecord::GetTransactionRecordType(Type type) const
 {
     switch (type)
     {
-    case Other: return "Other";
-    case Generated: return "Generated";
-    case StakeMint: return "StakeMint";
-    case StakeXION: return "StakeXION";
-    case SendToAddress: return "SendToAddress";
-    case SendToOther: return "SendToOther";
-    case RecvWithAddress: return "RecvWithAddress";
-    case MNReward: return "MNReward";
-    case RecvFromOther: return "RecvFromOther";
-    case SendToSelf: return "SendToSelf";
-    case ZerocoinMint: return "ZerocoinMint";
-    case ZerocoinSpend: return "ZerocoinSpend";
-    case RecvFromZerocoinSpend: return "RecvFromZerocoinSpend";
-    case ZerocoinSpend_Change_xIon: return "ZerocoinSpend_Change_xIon";
-    case ZerocoinSpend_FromMe: return "ZerocoinSpend_FromMe";
-    case RecvWithObfuscation: return "RecvWithObfuscation";
-    case ObfuscationDenominate: return "ObfuscationDenominate";
-    case ObfuscationCollateralPayment: return "ObfuscationCollateralPayment";
-    case ObfuscationMakeCollaterals: return "ObfuscationMakeCollaterals";
-    case ObfuscationCreateDenominations: return "ObfuscationCreateDenominations";
-    case Obfuscated: return "Obfuscated";
+        case Other: return "Other";
+        case Generated: return "Generated";
+        case StakeMint: return "StakeMint";
+        case StakeXION: return "StakeXION";
+        case SendToAddress: return "SendToAddress";
+        case SendToOther: return "SendToOther";
+        case RecvWithAddress: return "RecvWithAddress";
+        case MNReward: return "MNReward";
+        case RecvFromOther: return "RecvFromOther";
+        case SendToSelf: return "SendToSelf";
+        case ZerocoinMint: return "ZerocoinMint";
+        case ZerocoinSpend: return "ZerocoinSpend";
+        case RecvFromZerocoinSpend: return "RecvFromZerocoinSpend";
+        case ZerocoinSpend_Change_xIon: return "ZerocoinSpend_Change_xIon";
+        case ZerocoinSpend_FromMe: return "ZerocoinSpend_FromMe";
+        case RecvWithObfuscation: return "RecvWithObfuscation";
+        case ObfuscationDenominate: return "ObfuscationDenominate";
+        case ObfuscationCollateralPayment: return "ObfuscationCollateralPayment";
+        case ObfuscationMakeCollaterals: return "ObfuscationMakeCollaterals";
+        case ObfuscationCreateDenominations: return "ObfuscationCreateDenominations";
+        case Obfuscated: return "Obfuscated";
     }
     return NULL;
 }
@@ -450,18 +449,18 @@ std::string TransactionRecord::GetTransactionStatus(TransactionStatus::Status st
 {
     switch (status)
     {
-    case TransactionStatus::Confirmed: return "Confirmed";           /**< Have 6 or more confirmations (normal tx) or fully mature (mined tx) **/
-    /// Normal (sent/received) transactions
-    case TransactionStatus::OpenUntilDate: return "OpenUntilDate";   /**< Transaction not yet final, waiting for date */
-    case TransactionStatus::OpenUntilBlock: return "OpenUntilBlock"; /**< Transaction not yet final, waiting for block */
-    case TransactionStatus::Offline: return "Offline";               /**< Not sent to any other nodes **/
-    case TransactionStatus::Unconfirmed: return "Unconfirmed";       /**< Not yet mined into a block **/
-    case TransactionStatus::Confirming: return "Confirmed";          /**< Confirmed, but waiting for the recommended number of confirmations **/
-    case TransactionStatus::Conflicted: return "Conflicted";         /**< Conflicts with other transaction or mempool **/
-    /// Generated (mined) transactions
-    case TransactionStatus::Immature: return "Immature";             /**< Mined but waiting for maturity */
-    case TransactionStatus::MaturesWarning: return "MaturesWarning"; /**< Transaction will likely not mature because no nodes have confirmed */
-    case TransactionStatus::NotAccepted: return "NotAccepted";       /**< Mined but not accepted */
+        case TransactionStatus::Confirmed: return "Confirmed";           /**< Have 6 or more confirmations (normal tx) or fully mature (mined tx) **/
+            /// Normal (sent/received) transactions
+        case TransactionStatus::OpenUntilDate: return "OpenUntilDate";   /**< Transaction not yet final, waiting for date */
+        case TransactionStatus::OpenUntilBlock: return "OpenUntilBlock"; /**< Transaction not yet final, waiting for block */
+        case TransactionStatus::Offline: return "Offline";               /**< Not sent to any other nodes **/
+        case TransactionStatus::Unconfirmed: return "Unconfirmed";       /**< Not yet mined into a block **/
+        case TransactionStatus::Confirming: return "Confirmed";          /**< Confirmed, but waiting for the recommended number of confirmations **/
+        case TransactionStatus::Conflicted: return "Conflicted";         /**< Conflicts with other transaction or mempool **/
+            /// Generated (mined) transactions
+        case TransactionStatus::Immature: return "Immature";             /**< Mined but waiting for maturity */
+        case TransactionStatus::MaturesWarning: return "MaturesWarning"; /**< Transaction will likely not mature because no nodes have confirmed */
+        case TransactionStatus::NotAccepted: return "NotAccepted";       /**< Mined but not accepted */
     }
     return NULL;
 }

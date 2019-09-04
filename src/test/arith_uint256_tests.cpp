@@ -1,6 +1,5 @@
-// Copyright (c) 2011-2019 The Bitcoin Core developers
+// Copyright (c) 2011-2013 The Bitcoin Core developers
 // Copyright (c) 2017 The PIVX developers
-// Copyright (c) 2018-2019 The Ion developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,9 +13,9 @@
 #include "arith_uint256.h"
 #include <string>
 #include "version.h"
+#include "test/test_ion.h"
 
-BOOST_AUTO_TEST_SUITE(arith_uint256_tests)
-///BOOST_FIXTURE_TEST_SUITE(arith_uint256_tests, BasicTestingSetup)
+BOOST_FIXTURE_TEST_SUITE(arith_uint256_tests, BasicTestingSetup)
 
 /// Convert vector to arith_uint256, via uint256 blob
 inline arith_uint256 arith_uint256V(const std::vector<unsigned char>& vch)
@@ -69,7 +68,7 @@ std::string ArrayToString(const unsigned char A[], unsigned int width)
 BOOST_AUTO_TEST_CASE( basics ) // constructors, equality, inequality
 {
     BOOST_CHECK(1 == 0+1);
-    // constructor arith_uint256(vector<char>):
+    // constructor arith_uint256(std::vector<char>):
     BOOST_CHECK(R1L.ToString() == ArrayToString(R1Array,32));
     BOOST_CHECK(R2L.ToString() == ArrayToString(R2Array,32));
     BOOST_CHECK(ZeroL.ToString() == ArrayToString(ZeroArray,32));
@@ -85,7 +84,7 @@ BOOST_AUTO_TEST_CASE( basics ) // constructors, equality, inequality
     BOOST_CHECK(~MaxL == ZeroL);
     BOOST_CHECK( ((R1L ^ R2L) ^ R1L) == R2L);
 
-    uint64_t Tmp64 = 0xc4dab720d9c7acaaULL;
+    uint64_t Tmp64 = 0xe1dab720d9c7acaaULL;
     for (unsigned int i = 0; i < 256; ++i)
     {
         BOOST_CHECK(ZeroL != (OneL << i));

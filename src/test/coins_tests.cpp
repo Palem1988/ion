@@ -1,10 +1,11 @@
-// Copyright (c) 2014-2019 The Bitcoin Core developers
+// Copyright (c) 2014 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "coins.h"
 #include "random.h"
 #include "uint256.h"
+#include "test/test_ion.h"
 
 #include <vector>
 #include <map>
@@ -55,12 +56,10 @@ public:
         hashBestBlock_ = hashBlock;
         return true;
     }
-
-    bool GetStats(CCoinsStats& stats) const { return false; }
 };
 }
 
-BOOST_AUTO_TEST_SUITE(coins_tests)
+BOOST_FIXTURE_TEST_SUITE(coins_tests, BasicTestingSetup)
 
 static const unsigned int NUM_SIMULATION_ITERATIONS = 40000;
 

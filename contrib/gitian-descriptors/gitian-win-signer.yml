@@ -1,5 +1,6 @@
 ---
 name: "ion-win-signer"
+distro: "ubuntu"
 suites:
 - "bionic"
 architectures:
@@ -9,13 +10,15 @@ packages:
 - "libssl1.0-dev"
 - "autoconf"
 remotes:
-- "url": "https://github.com/ioncoincore/ion-detached-sigs.git"
+- "url": "https://github.com/cevap/ion-detached-sigs.git"
   "dir": "signature"
 files:
 - "osslsigncode-1.7.1.tar.xz"
 - "osslsigncode-Backports-to-1.7.1.patch"
 - "ion-win-unsigned.tar.xz"
 script: |
+  set -e -o pipefail
+
   BUILD_DIR=`pwd`
   SIGDIR=${BUILD_DIR}/signature/win
   UNSIGNED_DIR=${BUILD_DIR}/unsigned

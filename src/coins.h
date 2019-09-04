@@ -9,7 +9,6 @@
 #define BITCOIN_COINS_H
 
 #include "compressor.h"
-#include "core_memusage.h"
 #include "memusage.h"
 #include "script/standard.h"
 #include "serialize.h"
@@ -19,7 +18,6 @@
 #include <assert.h>
 #include <stdint.h>
 
-#include <boost/foreach.hpp>
 #include <boost/unordered_map.hpp>
 
 /** 
@@ -131,7 +129,7 @@ public:
 
     void ClearUnspendable()
     {
-        BOOST_FOREACH (CTxOut& txout, vout) {
+        for (CTxOut& txout : vout) {
             if (txout.scriptPubKey.IsUnspendable())
                 txout.SetNull();
         }
@@ -275,14 +273,14 @@ public:
     //! check whether a particular output is still available
     bool IsAvailable(unsigned int nPos) const
     {
-        return (nPos < vout.size() && !vout[nPos].IsNull() && !vout[nPos].scriptPubKey.IsZerocoinMint());
+        return (nPos < vout.size() && !vout[nPos].IsNull() && !vout[nPos].IsZerocoinMint());
     }
 
     //! check whether the entire CCoins is spent
     //! note that only !IsPruned() CCoins can be serialized
     bool IsPruned() const
     {
-        BOOST_FOREACH (const CTxOut& out, vout)
+        for (const CTxOut& out : vout)
             if (!out.IsNull())
                 return false;
         return true;
@@ -393,18 +391,25 @@ struct CCoinsCacheEntry {
 
 typedef boost::unordered_map<uint256, CCoinsCacheEntry, CCoinsKeyHasher> CCoinsMap;
 
-struct CCoinsStats {
-    int nHeight;
+/** Cursor for iterating over CoinsView state */
+class CCoinsViewCursor
+{
+public:
+    CCoinsViewCursor(const uint256 &hashBlockIn): hashBlock(hashBlockIn) {}
+    virtual ~CCoinsViewCursor() {}
+    virtual bool GetKey(uint256 &key) const = 0;
+    virtual bool GetValue(CCoins &coins) const = 0;
+    /* Don't care about GetKeySize here */
+    virtual unsigned int GetValueSize() const = 0;
+
+    virtual bool Valid() const = 0;
+    virtual void Next() = 0;
+
+    //! Get best block at the time this cursor was created
+    const uint256 &GetBestBlock() const { return hashBlock; }
+private:
     uint256 hashBlock;
-    uint64_t nTransactions;
-    uint64_t nTransactionOutputs;
-    uint64_t nSerializedSize;
-    uint256 hashSerialized;
-    CAmount nTotalAmount;
-
-    CCoinsStats() : nHeight(0), hashBlock(0), nTransactions(0), nTransactionOutputs(0), nSerializedSize(0), hashSerialized(0), nTotalAmount(0) {}
 };
-
 
 /** Abstract view on the open txout dataset. */
 class CCoinsView
@@ -424,8 +429,8 @@ public:
     //! The passed mapCoins can be modified.
     virtual bool BatchWrite(CCoinsMap& mapCoins, const uint256& hashBlock);
 
-    //! Calculate statistics about the unspent transaction output set
-    virtual bool GetStats(CCoinsStats& stats) const;
+    //! Get a cursor to iterate over the whole state
+    virtual CCoinsViewCursor *Cursor() const;
 
     //! As we use CCoinsViews polymorphically, have a virtual destructor
     virtual ~CCoinsView() {}
@@ -445,7 +450,7 @@ public:
     uint256 GetBestBlock() const;
     void SetBackend(CCoinsView& viewIn);
     bool BatchWrite(CCoinsMap& mapCoins, const uint256& hashBlock);
-    bool GetStats(CCoinsStats& stats) const;
+    CCoinsViewCursor *Cursor() const override;
 };
 
 class CCoinsViewCache;
@@ -506,6 +511,9 @@ public:
     uint256 GetBestBlock() const;
     void SetBestBlock(const uint256& hashBlock);
     bool BatchWrite(CCoinsMap& mapCoins, const uint256& hashBlock);
+    CCoinsViewCursor* Cursor() const {
+        throw std::logic_error("CCoinsViewCache cursor iteration not supported.");
+    }
 
     /**
      * Return a pointer to CCoins in the cache, or NULL if not found. This is
@@ -516,7 +524,7 @@ public:
 
     /**
      * Wrapper to provide a single utxo entry.
-     * 
+     *
      * Return a reference to Coin in the cache, or a pruned one if not found. This is
      * more efficient than GetCoin. Modifications to other cache entries are
      * allowed while accessing the returned pointer.
@@ -541,7 +549,7 @@ public:
     unsigned int GetCacheSize() const;
 
     /** 
-     * Amount of ioncoin.orging in to a transaction
+     * Amount of ion coming in to a transaction
      * Note that lightweight clients may not know anything besides the hash of previous transactions,
      * so may not be able to calculate this.
      *

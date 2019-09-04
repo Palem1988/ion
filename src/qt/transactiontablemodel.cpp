@@ -1,7 +1,6 @@
 // Copyright (c) 2011-2014 The Bitcoin developers
 // Copyright (c) 2014-2016 The Dash developers
 // Copyright (c) 2016-2018 The PIVX developers
-// Copyright (c) 2018-2019 The Ion developers
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -19,7 +18,7 @@
 #include "sync.h"
 #include "uint256.h"
 #include "util.h"
-#include "wallet.h"
+#include "wallet/wallet.h"
 
 #include <QColor>
 #include <QDateTime>
@@ -87,6 +86,7 @@ public:
                     std::copy(vRecs.begin(), vRecs.end(), std::back_inserter(QLRecs));
                     cachedWallet.append(QLRecs);
                 }
+
             }
         }
     }
@@ -139,7 +139,6 @@ public:
                 QList<TransactionRecord> toInsert;
                 toInsert.reserve(vToInsert.size());
                 std::copy(vToInsert.begin(), vToInsert.end(), std::back_inserter(toInsert));
-
                 if (!toInsert.isEmpty()) /* only if something to insert */
                 {
                     parent->beginInsertRows(QModelIndex(), lowerIndex, lowerIndex + toInsert.size() - 1);
@@ -502,7 +501,7 @@ QVariant TransactionTableModel::txStatusDecoration(const TransactionRecord* wtx)
         return QIcon(":/icons/transaction_conflicted");
     case TransactionStatus::Immature: {
         int total = wtx->status.depth + wtx->status.matures_in;
-        int part = (wtx->status.depth * 4 / total) + 1;
+        int part = (wtx->status.depth * 5 / total) + 1;
         return QIcon(QString(":/icons/transaction_%1").arg(part));
     }
     case TransactionStatus::MaturesWarning:
@@ -566,7 +565,7 @@ QVariant TransactionTableModel::data(const QModelIndex& index, int role) const
         case Status:
             return QString::fromStdString(rec->status.sortKey);
         case Date:
-            return qint64(rec->time);
+            return  qint64(rec->time);
         case Type:
             return formatTxType(rec);
         case Watchonly:
